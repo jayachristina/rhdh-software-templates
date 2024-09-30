@@ -1,0 +1,11 @@
+apiVersion: backstage.io/v1alpha1
+kind: Location
+metadata:
+  name: rhdh-collection
+  description: A collection of Example Software Templates for Red Hat Developer Hub
+spec:
+  type: url
+  targets:
+    - templates/gitlab/techdocs/template.yaml
+    - templates/gitlab/register-component/template.yaml
+    - templates/gitlab/python-backend/template.yaml

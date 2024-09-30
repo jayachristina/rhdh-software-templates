@@ -1,0 +1,116 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: register-component
+  title: Register existing component to Software Catalog
+  description: Registers existing component (GitHub repository) to Software Catalog
+  tags:
+    - import
+    - catalog
+    - register
+spec:
+  owner: janus-authors
+  system: janus-idp
+  type: service
+
+  parameters:
+    - title: Provide information about the GitHub location
+      required:
+        - gitlabHost
+        - gitlabOrganization
+        - repositoryName
+      properties:
+        gitlabHost:
+          title: Gitlab hostname
+          type: string
+          description: Your gitlab
+          default: {{ gitlab_host }}
+          enum:
+            - {{ gitlab_host }}
+        gitlabOrganization:
+          title: GitLab Organization
+          type: string
+          default: {{ gitlab_destination_group }}
+          enum:
+            - {{ gitlab_destination_group }}
+        repositoryName:
+          title: Repository name
+          type: string
+
+    - title: Provide information about the new component
+      required:
+        - componentOwner
+        - componentType
+        - componentLifecycle
+      properties:
+        componentName:
+          title: Component Name
+          type: string
+          description: Name of the created component. If leaved empty the name of the repository will be used.
+        componentOwner:
+          title: Owner
+          description: Select an owner from the list or enter a reference to a Group or a User
+          type: string
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind:
+                - Group
+                - User
+        componentType:
+          title: Type
+          type: string
+          description: 'The type of component. Well-known and common values: service, website, library.'
+          default: other
+        componentLifecycle:
+          title: Lifecycle
+          type: string
+          description: 'The lifecycle state of the component. Well-known and common values: experimental, production, deprecated.'
+          default: unknown
+
+  steps:
+    - id: fetchRepository
+      name: Fetch repository
+      action: fetch:plain
+      input:
+        url: https://${{ gitlab_host }}/${{ parameters.gitlabOrganization }}/${{ parameters.repositoryName }}
+
+    - id: catalogTemplate
+      name: Create catalog-info.yaml file
+      action: fetch:template
+      input:
+        url: ../../../skeletons/catalog-info/
+        values:
+          componentName: ${{ parameters.componentName }}
+          orgName: ${{ parameters.gitlabOrganization }}
+          repoName: ${{ parameters.repositoryName }}
+          componentLifecycle: ${{ parameters.componentLifecycle }}
+          applicationType: ${{ parameters.componentType }}
+          owner: ${{ parameters.componentOwner }}
+
+    - id: publishMergeRequest
+      name: Open PR with catalog-info.yaml
+      action: publish:gitlab:merge-request
+      input:
+        repoUrl: ${{ gitlab_host }}?owner=${{ parameters.gitlabOrganization }}&repo=${{ parameters.repositoryName }}
+        branchName: add-catalog-info
+        title: add catalog-info.yaml
+        description: |
+          This pull request adds a **Backstage entity metadata file** to this repository.
+
+          After this pull request is merged, the component will become available.
+
+          For more information, read an [overview of the Backstage software catalog](https://backstage.io/docs/features/software-catalog/).
+
+    - id: register
+      name: Register component
+      action: catalog:register
+      input:
+        repoContentsUrl: https://${{ gitlab_host }}/${{ parameters.gitlabOrganization }}/${{ parameters.repositoryName }}/blob/${{ steps.publishMergeRequest.output.targetBranchName }}/
+        catalogInfoPath: /catalog-info.yaml
+        optional: true
+
+  output:
+    links:
+      - title: 'Open PR #${{ steps.publishMergeRequest.output.mergeRequestNumber }}'
+        url: ${{ steps.publishMergeRequest.output.remoteUrl }}
